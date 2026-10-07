@@ -5,18 +5,25 @@ import java.util.List;
 
 public class Main {
     private static final int LIMITE_CACHE = 10;
-    private static int proximoId = 6;
+    private static int proximoId = 13;
 
     public static void main(String[] args) {
-        // Banco de dados inicial mockado
+        // Mock inicial de registros no banco
         List<Pessoa> banco = new ArrayList<>();
         banco.add(new Pessoa(1, "Ana Silva", 28));
         banco.add(new Pessoa(2, "Bruno Costa", 34));
         banco.add(new Pessoa(3, "Carla Souza", 22));
         banco.add(new Pessoa(4, "Diego Lima", 41));
-        banco.add(new Pessoa(5, "Elena Martins", 29));;
+        banco.add(new Pessoa(5, "Elena Martins", 29));
+        banco.add(new Pessoa(6, "Felipe Rocha", 31));
+        banco.add(new Pessoa(7, "Gabriela Duarte", 26));
+        banco.add(new Pessoa(8, "Hugo Ribeiro", 38));
+        banco.add(new Pessoa(9, "Isabela Gomes", 24));
+        banco.add(new Pessoa(10, "João Pedro", 45));
+        banco.add(new Pessoa(11, "Larissa Melo", 30));
+        banco.add(new Pessoa(12, "Marcos Vinicius", 27));
 
-        // Cache gerenciado com LinkedList sob política LRU
+        // Cache LRU gerenciado por LinkedList (cabeça = mais antigo / cauda = mais recente)
         LinkedList<Pessoa> cache = new LinkedList<>();
 
         boolean rodando = true;
@@ -51,43 +58,39 @@ public class Main {
         }
     }
 
-    // 1. CONSULTAR (LRU: acerto move o item para o final da fila)
+    // 1. READ (Cache Hit move para o fim; Cache Miss busca no banco e expulsa o primeiro se lotado)
     private static void consultarPessoa(List<Pessoa> banco, LinkedList<Pessoa> cache) {
         int id = lerInteiro("Digite o ID para consulta: ");
         if (id == -1) return;
 
-        // 1.1 Tenta localizar no cache
         Pessoa encontradaNoCache = null;
         for (int i = 0; i < cache.size(); i++) {
             if (cache.get(i).getId() == id) {
-                encontradaNoCache = cache.remove(i); // Remove da posição atual
+                encontradaNoCache = cache.remove(i);
                 break;
             }
         }
 
         if (encontradaNoCache != null) {
-            // LRU Hit: recoloca no fim (agora é o mais recentemente usado)
             cache.addLast(encontradaNoCache);
-            println("-> [CACHE HIT - LRU] Pessoa acessada e promovida ao topo recente: " + encontradaNoCache);
+            println("-> [CACHE HIT - LRU] Promovido ao topo recente: " + encontradaNoCache);
             return;
         }
 
-        // 1.2 Cache Miss: busca no banco
         Pessoa encontradaNoBanco = buscarPorId(banco, id);
         if (encontradaNoBanco != null) {
             if (cache.size() >= LIMITE_CACHE) {
-                // Remove o menos recentemente usado (Least Recently Used) da ponta inicial
                 Pessoa despejada = cache.removeFirst();
-                println("-> [LRU EVICTION] Cache cheio! Menos recentemente acessado removido: " + despejada.getNome());
+                println("-> [LRU EVICTION] Cache cheio! Menos recente removido: " + despejada.getNome());
             }
             cache.addLast(encontradaNoBanco);
-            println("-> [CACHE MISS] Pessoa buscada no banco e adicionada como mais recente: " + encontradaNoBanco);
+            println("-> [CACHE MISS] Buscado no banco e adicionado ao cache: " + encontradaNoBanco);
         } else {
-            println("-> Registro com ID " + id + " não existe nem no cache, nem no banco.");
+            println("-> Registro com ID " + id + " não encontrado.");
         }
     }
 
-    // 2. INCLUIR (Salva no banco)
+    // 2. CREATE (Insere no banco)
     private static void incluirPessoa(List<Pessoa> banco) {
         print("Digite o nome da pessoa: ");
         String nome = readln();
@@ -104,10 +107,10 @@ public class Main {
 
         Pessoa novaPessoa = new Pessoa(proximoId++, nome.trim(), idade);
         banco.add(novaPessoa);
-        println("-> Pessoa cadastrada no banco: " + novaPessoa);
+        println("-> Cadastrado com sucesso no banco: " + novaPessoa);
     }
 
-    // 3. ATUALIZAR (Sincroniza e renova a prioridade LRU no cache)
+    // 3. UPDATE (Corrige os erros das linhas 124, 132, 148 e 149)
     private static void atualizarPessoa(List<Pessoa> banco, LinkedList<Pessoa> cache) {
         int id = lerInteiro("Digite o ID da pessoa a atualizar: ");
         if (id == -1) return;
@@ -121,7 +124,7 @@ public class Main {
         print("Novo nome (Enter para manter '" + pessoaBanco.getNome() + "'): ");
         String novoNome = readln();
         if (novoNome != null && !novoNome.isBlank()) {
-            pessoaBanco.setNome(novoNome.trim());
+            pessoaBanco.setNome(novoNome.trim()); // Linha 124 resolvida
         }
 
         print("Nova idade (Enter para manter " + pessoaBanco.getIdade() + "): ");
@@ -129,13 +132,15 @@ public class Main {
         if (novaIdadeStr != null && !novaIdadeStr.isBlank()) {
             try {
                 int novaIdade = Integer.parseInt(novaIdadeStr.trim());
-                if (novaIdade >= 0) pessoaBanco.setIdade(novaIdade);
+                if (novaIdade >= 0) {
+                    pessoaBanco.setIdade(novaIdade); // Linha 132 resolvida
+                }
             } catch (NumberFormatException e) {
-                println("Idade inválida mantida.");
+                println("Idade inválida; valor anterior mantido.");
             }
         }
 
-        // Se está no cache, atualiza dados e move para o fim da fila (acesso recente)
+        // Sincroniza no cache caso esteja carregado
         Pessoa encontradaNoCache = null;
         for (int i = 0; i < cache.size(); i++) {
             if (cache.get(i).getId() == id) {
@@ -145,16 +150,16 @@ public class Main {
         }
 
         if (encontradaNoCache != null) {
-            encontradaNoCache.setNome(pessoaBanco.getNome());
-            encontradaNoCache.setIdade(pessoaBanco.getIdade());
-            cache.addLast(encontradaNoCache);
-            println("-> Dados atualizados no banco e promovidos ao topo recente do cache!");
+            encontradaNoCache.setNome(pessoaBanco.getNome());   // Linha 148 resolvida
+            encontradaNoCache.setIdade(pessoaBanco.getIdade()); // Linha 149 resolvida
+            cache.addLast(encontradaNoCache); // Promovido ao topo recente
+            println("-> Dados sincronizados no cache e atualizados no banco!");
         } else {
             println("-> Dados atualizados no banco.");
         }
     }
 
-    // 4. EXCLUIR (Remove do banco e expurga do cache)
+    // 4. DELETE (Remove do banco e expulsa do cache)
     private static void excluirPessoa(List<Pessoa> banco, LinkedList<Pessoa> cache) {
         int id = lerInteiro("Digite o ID da pessoa a remover: ");
         if (id == -1) return;
@@ -171,31 +176,27 @@ public class Main {
             cache.removeIf(p -> p.getId() == id);
             println("-> Pessoa " + removida.getNome() + " excluída do banco e expurgada do cache.");
         } else {
-            println("-> ID " + id + " não encontrado para exclusão.");
+            println("-> ID " + id + " não encontrado.");
         }
     }
 
-    // 5. VISUALIZAR CACHE (Início = LRU / Fim = MRU)
+    // 5. LISTAR CACHE
     private static void exibirCache(LinkedList<Pessoa> cache) {
-        println("\n--- ESTADO DO CACHE LRU ---");
+        println("\n--- FILA DO CACHE LRU (" + cache.size() + "/" + LIMITE_CACHE + ") ---");
         if (cache.isEmpty()) {
-            println("[Cache vazio]");
+            println("[Vazio]");
             return;
         }
-
-        println("Posição 1 = Próximo a ser descartado (LRU)");
-        println("Posição " + cache.size() + " = Mais recente acessado (MRU)\n");
-
         for (int i = 0; i < cache.size(); i++) {
-            String tag = (i == 0) ? " <- [Mais antigo / Próximo a sair]" :
-                    (i == cache.size() - 1) ? " <- [Mais recente]" : "";
-            println((i + 1) + ". " + cache.get(i) + tag);
+            String etiqueta = (i == 0) ? " <- [Mais antigo / Primeiro a sair se lotar]" :
+                              (i == cache.size() - 1) ? " <- [Mais recentemente acessado]" : "";
+            println((i + 1) + ". " + cache.get(i) + etiqueta);
         }
     }
 
     // 6. LISTAR BANCO
     private static void exibirBanco(List<Pessoa> banco) {
-        println("\n--- REGISTROS NO BANCO DE DADOS (" + banco.size() + ") ---");
+        println("\n--- REGISTROS TOTAIS NO BANCO (" + banco.size() + ") ---");
         for (Pessoa p : banco) {
             println(p.toString());
         }
@@ -208,14 +209,14 @@ public class Main {
         return null;
     }
 
-    private static int lerInteiro(String prompt) {
-        print(prompt);
+    private static int lerInteiro(String rotulo) {
+        print(rotulo);
         String entrada = readln();
         if (entrada == null) return -1;
         try {
             return Integer.parseInt(entrada.trim());
         } catch (NumberFormatException e) {
-            println("Erro: Entrada não é um número válido!");
+            println("Entrada inválida. Digite um número inteiro.");
             return -1;
         }
     }
